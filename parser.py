@@ -1,27 +1,52 @@
-# parser.py
-from net_utils import get_soup
+import requests
+from bs4 import BeautifulSoup
+from collections import deque
 
-def extract_product_links(soup, brand, category):
-    """Извлечение ссылок на модели товаров из страницы категории"""
-    links = set()  # Используем set, чтобы избежать дубликатов
-    # Ищем все теги <a> с атрибутом href, которые ведут на страницы моделей
-    product_elements = soup.find_all('a', href=True)
-    
-    for product_element in product_elements:
-        link = product_element['href']
-        # Фильтруем ссылки, чтобы они были связаны с моделью (по ключевым словам)
-        if f"/{brand}/{category}/" in link:  # Пример фильтрации по категории
-            # Преобразуем относительные ссылки в абсолютные
-            if not link.startswith("http"):
-                link = f"https://www.jopa.nl{link}"
-            links.add(link)  # Добавляем ссылку в set (автоматически удаляет дубликаты)
-    
-    return list(links)  # Преобразуем set обратно в list
+BASE_URL = "https://www.jopa.nl"
 
-def parse_category_page(url, brand, category):
-    """Парсинг страницы категории товара для извлечения ссылок на модели"""
-    soup = get_soup(url)
-    if soup:
-        model_links = extract_product_links(soup, brand, category)
-        return model_links
-    return []
+def safe_request(url):
+    """
+    Функция для безопасного отправления запроса.
+    """
+    try:
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+        return response
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️ Ошибка запроса: {e}")
+        return None
+
+def collect_all_final_pages(start_url, brand):
+    """
+    Функция для сбора всех финальных страниц с товарами по бренду.
+    Возвращает список URL страниц, на которых находится блок <div class="artikel">.
+    """
+    visited = set()
+    queue = deque([start_url])
+    final_pages = []
+
+    while queue:
+        url = queue.popleft()
+        if url in visited:
+            continue
+        visited.add(url)
+
+        response = safe_request(url)
+        if not response:
+            continue
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Если на странице есть товарный блок — считаем её «финальной»
+        if soup.select("div.artikel"):
+            final_pages.append(url)
+
+        # Добавляем в очередь все ссылки вида /en/{brand}/… для дальнейшего обхода
+        for a in soup.select(f"a[href*='/en/{brand.lower()}/']"):
+            href = a.get("href")
+            if href:
+                full_url = href if href.startswith("http") else BASE_URL + href
+                if full_url not in visited:
+                    queue.append(full_url)
+
+    return final_pages
