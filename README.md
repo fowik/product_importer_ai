@@ -71,4 +71,6 @@
 
    ```bash
     OPENROUTER_API_KEY="sk-or-jūsu-api-atslēga"
+    MOTOBUZZ_USERNAME="tavs-username"
+    MOTOBUZZ_PASSWORD="tavs-password"
    ```
