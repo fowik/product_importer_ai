@@ -62,7 +62,7 @@ def get_products_flow():
 
 def upload_flow():
     brand = input("🔤 Введите название бренда: ").strip().lower()
-    details_file = os.path.join(DETAILS_DIR, f"{brand}_products.json")
+    details_file = os.path.join(DETAILS_DIR, f"{brand}_products copy.json")
 
     if not os.path.exists(details_file):
         print(f"❌ Файл {details_file} не найден.")

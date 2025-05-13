@@ -101,20 +101,18 @@ def extract_sizes(soup: BeautifulSoup) -> List[str]:
                 sizes.append(parts[1])
     return sorted(set(sizes))
 
-
-def extract_descriptions(soup: BeautifulSoup) -> Dict[str, str]:
+def extract_descriptions(soup):
     name = extract_name(soup)
-    full = generate_description(name, "Sidi")
+    raw = generate_description(name, "Sidi")
 
     short, long = "", ""
-    m1 = re.search(r"Īss apraksts\s*(.*?)\s*Detalizēts apraksts", full, re.S)
-    if m1:
-        short = m1.group(1).strip(":- \n")
-    m2 = re.search(r"Detalizēts apraksts.*?:(.*)", full, re.S)
-    if m2:
-        long = m2.group(1).strip(":- \n")
+    m = re.search(r"1\.\s*Īsais:\s*(.+?)\s*2\.\s*Garais:\s*(.+)", raw, re.S)
+    if m:
+        short = m.group(1).strip()
+        long = m.group(2).strip()
 
     return {"short-description": short, "long-description": long}
+
 
 
 def get_product_details(category_url: str) -> Optional[Dict[str, Any]]:

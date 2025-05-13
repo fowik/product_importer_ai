@@ -192,7 +192,7 @@ def create_product(driver, wait, prod, brand_name):
 
     # 4) Upload images and variants
     upload_images(driver, wait, prod['images'])
-    upload_variants(driver, wait, prod['sizes'])
+    upload_variants(driver, wait, prod['sizes'])    
 
     print(f"✔ Готово: {prod['name']}")
 
