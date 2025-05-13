@@ -63,7 +63,7 @@
 
    ```bash
    git clone https://github.com/fowik/product_importer_ai.git
-   cd your-repo
+   cd product_importer_ai
    pip install -r requirements.txt
    ```
 
