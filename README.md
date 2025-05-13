@@ -62,7 +62,7 @@
 1. **Instalēšana**
 
    ```bash
-   git clone https://github.com/yourusername/your-repo.git
+   git clone https://github.com/fowik/product_importer_ai.git
    cd your-repo
    pip install -r requirements.txt
    ```
