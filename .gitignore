@@ -1,19 +1,19 @@
-# Файлы окружения
+# Environment variables
 .env
 
-# Виртуальное окружение
+# Virtual environment
 venv/
 
-# Кэш Python
+# Cache python files
 __pycache__/
 *.pyc
 *.pyo
 
-# Логи
+# logs
 *.log
 
-# Конфигурации IDE
+# IDE configurations
 .vscode/
 
-# Системные файлы
+# System files
 Thumbs.db

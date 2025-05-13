@@ -4,6 +4,7 @@ import time
 import tempfile
 import traceback
 import requests
+from dotenv import load_dotenv
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -172,7 +173,7 @@ def create_product(driver, wait, prod, brand_name):
     driver.get('https://www.motobuzz.lv/admin/kategorie-1929')
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.sidebar')))
 
-    # 1) Добавляем основной товар
+    # 1) Create new product
     add_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.pridat.btn.btn-xs.btn-success')))
     add_btn.click()
     wait.until(EC.visibility_of_element_located((By.ID, 'nazev'))).send_keys(prod['name'])
@@ -180,16 +181,16 @@ def create_product(driver, wait, prod, brand_name):
     driver.find_element(By.CSS_SELECTOR, '.modal-footer button[type=submit]').click()
     wait.until(EC.url_contains('/admin/kategorie-1929/zbozi-'))
 
-    # 2) Редактируем поля
+    # 2) Edit product details
     inline_edit_text(driver, wait, 'CPolozka.ean', prod['ean'])
     inline_edit_text(driver, wait, 'CZbozi.dodavatelurl', 'https://jopa.nl/en/')
     inline_edit_brand_js(driver, wait, 'CZbozi.vyrobce_id', brand_name)
 
-    # 3) Заполняем описания
+    # 3) Fill descriptions
     fill_tinymce(driver, wait, 'zbozi.popis', prod['short-description'])
     fill_tinymce(driver, wait, 'zbozi.popis2', prod['long-description'])
 
-    # 4) Загружаем изображения и варианты
+    # 4) Upload images and variants
     upload_images(driver, wait, prod['images'])
     upload_variants(driver, wait, prod['sizes'])
 
@@ -197,9 +198,15 @@ def create_product(driver, wait, prod, brand_name):
 
 
 def start_upload(file_path, brand_name):
+    load_dotenv()  
+    username = os.getenv("MOTOBUZZ_USERNAME")
+    password = os.getenv("MOTOBUZZ_PASSWORD")
+    if not username or not password:
+        raise RuntimeError("Не найдены MOTOBUZZ_USERNAME или MOTOBUZZ_PASSWORD в .env")
+
     products = load_products(file_path)
     driver, wait = init_driver()
-    login(driver, wait, 'https://www.motobuzz.lv/admin/', 'ilja.rimsa', 'Azx11asd-')
+    login(driver, wait, 'https://www.motobuzz.lv/admin/', username, password)
 
     for prod in products:
         try:
@@ -210,7 +217,3 @@ def start_upload(file_path, brand_name):
             print(f"✘ Ошибка при создании {prod['name']}")
 
     driver.quit()
-
-
-if __name__ == '__main__':
-    main()
