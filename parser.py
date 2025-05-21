@@ -39,7 +39,7 @@ def collect_all_final_pages(start_url: str, brand: str) -> List[str]:
     return final_pages
 
 
-def parse_product_page(url: str) -> Optional[Dict[str, Any]]:
+def parse_product_page(brand, url: str) -> Optional[Dict[str, Any]]:
     resp = safe_request(url)
     if not resp:
         return None
@@ -65,7 +65,7 @@ def parse_product_page(url: str) -> Optional[Dict[str, Any]]:
         "price":        extract_price(soup2),
         "ean":          extract_ean(soup2),
         "sizes":        extract_sizes(soup),
-        **extract_descriptions(soup2)
+        **extract_descriptions(soup2, brand)
     }
 
 def extract_name(soup: BeautifulSoup) -> str:
@@ -101,23 +101,28 @@ def extract_sizes(soup: BeautifulSoup) -> List[str]:
                 sizes.append(parts[1])
     return sorted(set(sizes))
 
-def extract_descriptions(soup):
+def extract_descriptions(soup, brand: str) -> Dict[str, str]:
     name = extract_name(soup)
-    raw = generate_description(name, "Sidi")
+    raw = generate_description(name, brand)
 
     short, long = "", ""
-    m = re.search(r"1\.\s*Īsais:\s*(.+?)\s*2\.\s*Garais:\s*(.+)", raw, re.S)
+
+    # Регулярка, устойчивая к регистру и лишним пробелам
+    m = re.search(r"1\.\s*Īsais:\s*(.+?)\s*2\.\s*Garais:\s*(.+)", raw, re.S | re.I)
     if m:
         short = m.group(1).strip()
         long = m.group(2).strip()
+    else:
+        print("[WARN] Apraksta formāts neatbilda gaidītajam:\n", raw)
 
     return {"short-description": short, "long-description": long}
 
 
 
-def get_product_details(category_url: str) -> Optional[Dict[str, Any]]:
+
+def get_product_details(brand, category_url: str) -> Optional[Dict[str, Any]]:
     try:
-        data = parse_product_page(category_url)
+        data = parse_product_page(brand, category_url)
         if data:
             print(f"✔ Parsed: {data['name']}")
         return data

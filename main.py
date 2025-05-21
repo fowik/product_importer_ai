@@ -52,7 +52,7 @@ def get_products_flow():
     products = []
     for i, url in enumerate(pages, 1):
         print(f"  {i}/{len(pages)}: {url}")
-        products.append(get_product_details(url))
+        products.append(get_product_details(brand, url))
 
     ensure_dir(DETAILS_DIR)
     out_path = os.path.join(DETAILS_DIR, f"{brand}_products.json")
@@ -62,14 +62,15 @@ def get_products_flow():
 
 def upload_flow():
     brand = input("🔤 Введите название бренда: ").strip().lower()
-    details_file = os.path.join(DETAILS_DIR, f"{brand}_products copy.json")
+    brand = brand.replace(" ", "-")
+    details_file = os.path.join(DETAILS_DIR, f"{brand}_products.json")
 
     if not os.path.exists(details_file):
         print(f"❌ Файл {details_file} не найден.")
         sys.exit(1)
 
     print(f"🚀 Запуск загрузки из {details_file}...")
-    start_upload(details_file, brand.upper())
+    start_upload(details_file, brand.replace("-", " ").upper())
     print("✅ Загрузка завершена")
 
 

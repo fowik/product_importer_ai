@@ -5,6 +5,7 @@ import tempfile
 import traceback
 import requests
 from dotenv import load_dotenv
+from collections import defaultdict
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -39,8 +40,7 @@ def inline_edit_text(driver, wait, data_name, value):
     anchor = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"a.inlineedit[data-name='{data_name}']")))
     anchor.click()
     form = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "form.editableform")))
-
-    # Находим первый видимый input или textarea
+    
     field = None
     for tag in ('input', 'textarea'):
         for el in form.find_elements(By.TAG_NAME, tag):
@@ -168,12 +168,85 @@ def upload_variants(driver, wait, variants):
         print(f"✘ Ошибка при добавлении вариантов: {e}")
         traceback.print_exc()
 
+def set_price_source_to_product(driver, wait):
+    driver.get(driver.current_url)
+
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, ".sidebar")))
+
+    driver.find_element(By.CSS_SELECTOR, "a[data-presenter='zbozi_detail']").click()
+
+    price_source_link = wait.until(EC.element_to_be_clickable(
+        (By.CSS_SELECTOR, "a.inlineedit[data-name='CZbozi.zdrojceny']")))
+    price_source_link.click()
+
+    form = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "form.editableform")))
+
+    select = form.find_element(By.TAG_NAME, "select")
+    for option in select.find_elements(By.TAG_NAME, "option"):
+        if option.text.strip() == "cenu určuje zboží":
+            option.click()
+            break
+
+    submit_btn = form.find_element(By.CSS_SELECTOR, "button.editable-submit")
+    driver.execute_script("arguments[0].scrollIntoView(true);", submit_btn)
+    driver.execute_script("arguments[0].click();", submit_btn)
+
+    wait.until(EC.staleness_of(form))
+
+    driver.refresh()
+
+def set_accessability(driver, wait):
+    btn = wait.until(EC.element_to_be_clickable((
+        By.CSS_SELECTOR,
+        'a.dostupnost.btn.btn-xs.btn-info'
+    )))
+    btn.click()
+
+    select_elem = wait.until(EC.element_to_be_clickable((By.ID, "dostupnost")))
+    select = Select(select_elem)
+    select.select_by_value("1") 
+
+    time.sleep(0.5)
+
+    nastavit_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a.nastavit.btn.btn-xs.btn-success")))
+    nastavit_btn.click()
+
+
+def group_products_by_subcategory(products, brand_name=None):
+    grouped = defaultdict(list)
+    for prod in products:
+        url = prod.get("category_url", "")
+        if brand_name:
+            after_brand = url.split(f"/{brand_name}/", 1)[-1]
+            parts = after_brand.strip("/").split("/")
+            if len(parts) > 1:
+                subcategory = "/".join(parts[:-1])
+            else:
+                subcategory = "" 
+        else:
+            subcategory = url.split("/")[-2]
+        grouped[subcategory].append(prod)
+    return grouped
+
+
+
+def pretty_print_grouped_products(grouped_products):
+    for category, products in grouped_products.items():
+        print(f"{category}")
+        for prod in products:
+            sizes = ", ".join(prod.get('sizes', [])) or "-"
+            name = prod.get('name', 'Без названия')
+            print(f" - {name} Sizes: [{sizes}]")
+        print()
+
+
+def extract_external_id(url):
+    return url.rstrip('/').split('-')[-1]
 
 def create_product(driver, wait, prod, brand_name):
     driver.get('https://www.motobuzz.lv/admin/kategorie-1929')
     wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.sidebar')))
 
-    # 1) Create new product
     add_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.pridat.btn.btn-xs.btn-success')))
     add_btn.click()
     wait.until(EC.visibility_of_element_located((By.ID, 'nazev'))).send_keys(prod['name'])
@@ -181,20 +254,86 @@ def create_product(driver, wait, prod, brand_name):
     driver.find_element(By.CSS_SELECTOR, '.modal-footer button[type=submit]').click()
     wait.until(EC.url_contains('/admin/kategorie-1929/zbozi-'))
 
-    # 2) Edit product details
+    current_url = driver.current_url
+    external_id = extract_external_id(current_url)
+
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a.inlineedit[data-name="CPolozka.code"]')))
+    code_elem = driver.find_element(By.CSS_SELECTOR, 'a.inlineedit[data-name="CPolozka.code"]')
+    internal_id = "P" + code_elem.get_attribute("data-pk")
+
     inline_edit_text(driver, wait, 'CPolozka.ean', prod['ean'])
     inline_edit_text(driver, wait, 'CZbozi.dodavatelurl', 'https://jopa.nl/en/')
     inline_edit_brand_js(driver, wait, 'CZbozi.vyrobce_id', brand_name)
 
-    # 3) Fill descriptions
     fill_tinymce(driver, wait, 'zbozi.popis', prod['short-description'])
     fill_tinymce(driver, wait, 'zbozi.popis2', prod['long-description'])
 
-    # 4) Upload images and variants
     upload_images(driver, wait, prod['images'])
-    upload_variants(driver, wait, prod['sizes'])    
+    upload_variants(driver, wait, prod['sizes'])
 
-    print(f"✔ Готово: {prod['name']}")
+    set_price_source_to_product(driver, wait)
+    set_accessability(driver, wait)
+
+    print(f"✔ Готово: {prod['name']} (internal PK: {internal_id}, external ID: {external_id}) URL: {current_url}")
+    return {
+        "product_url": current_url,
+        "product_pk": internal_id,
+        "external_id": external_id,
+        "original_url": prod.get('product_url')
+    }
+
+def add_podobne_products(driver, wait, base_external_id, podobne_internal_ids):
+    base_url = f"https://www.motobuzz.lv/admin/kategorie-1929/zbozi-{base_external_id}"
+    driver.get(base_url)
+    try:
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.sidebar')))
+        
+    except:
+        return
+
+    podobne_tab = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[data-presenter='zbozi_podobne']")))
+    podobne_tab.click()
+
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "div.widget-main")))
+
+    for pid in podobne_internal_ids:
+        if pid == base_external_id:
+            continue
+
+        modal = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.widget-main.padding-8")))
+
+        radio_label = modal.find_element(
+            By.XPATH,
+            ".//span[contains(@class, 'lbl') and contains(text(), 'vybrat přes filtr')]"
+        )
+        driver.execute_script("arguments[0].scrollIntoView(true);", radio_label)
+        driver.execute_script("arguments[0].click();", radio_label)
+
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "form.filtr")))
+        
+        search_input = modal.find_element(By.CSS_SELECTOR, "input#hledat")
+        search_input.clear()
+        search_input.send_keys(pid)
+
+        filter_btn = modal.find_element(By.CSS_SELECTOR, "button.btn.btn-primary.filtrovat")
+        filter_btn.click()
+
+        wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "table.produkty")))
+
+        checkbox = modal.find_element(By.CSS_SELECTOR, "input[type='checkbox'].ace.zatrhnout")
+        label = checkbox.find_element(By.XPATH, "./following-sibling::span[contains(@class, 'lbl')]")
+        driver.execute_script("arguments[0].scrollIntoView(true);", label)
+        driver.execute_script("arguments[0].click();", label)
+
+        select_btn = modal.find_element(By.CSS_SELECTOR, "div.table-footer a.vyber.btn.btn-xs.btn-success")
+        select_btn.click()
+        print(f"✔ Добавлен podobny товар с id {pid} к товару {base_external_id}")
+
+
+
+    driver.refresh()
+    wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, '.sidebar')))
+
 
 
 def start_upload(file_path, brand_name):
@@ -205,15 +344,48 @@ def start_upload(file_path, brand_name):
         raise RuntimeError("Не найдены MOTOBUZZ_USERNAME или MOTOBUZZ_PASSWORD в .env")
 
     products = load_products(file_path)
+
+    grouped = group_products_by_subcategory(products, brand_name)
+    pretty_print_grouped_products(grouped) 
+
     driver, wait = init_driver()
     login(driver, wait, 'https://www.motobuzz.lv/admin/', username, password)
 
+    created_products = [] 
+
     for prod in products:
         try:
-            create_product(driver, wait, prod, brand_name)
+            created = create_product(driver, wait, prod, brand_name)
+            created_products.append(created)
             time.sleep(2)
         except Exception:
             traceback.print_exc()
             print(f"✘ Ошибка при создании {prod['name']}")
 
+    # Создаём словари для поиска
+    url_to_internal_pk = {p["original_url"]: p["product_pk"] for p in created_products}
+    url_to_external_id = {p["original_url"]: p["external_id"] for p in created_products}
+
+    print(f"Создано {len(created_products)} товаров")
+    print(f"Создано {len(url_to_internal_pk)} товаров с внутренними ID")
+
+    # Добавляем podobne для товаров из каждой подкатегории
+    for subcat, prods in grouped.items():
+        internal_pks = [url_to_internal_pk.get(prod['product_url']) for prod in prods if prod['product_url'] in url_to_internal_pk]
+
+        for prod in prods:
+            base_external_id = url_to_external_id.get(prod['product_url'])
+            base_internal_id = url_to_internal_pk.get(prod['product_url'])
+
+            if not base_external_id or not base_internal_id:
+                continue
+
+            podobne_internal_pks = [pk for pk in internal_pks if pk != base_internal_id]
+            print(f"DEBUG: podobne_internal_pks: {podobne_internal_pks}")
+
+            print(f"Добавляем похожие для товара с external_id={base_external_id} и internal_id={base_internal_id}")
+            add_podobne_products(driver, wait, base_external_id, podobne_internal_pks)
+
+
     driver.quit()
+    print("✔ Все товары загружены и связаны как подобные")
